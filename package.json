@@ -1,0 +1,12 @@
+{
+  "name": "life-action-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "把高性价比人生指南变成个人行动计划的静态工具",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check app.js && node --check state.js && node --check sw.js && node --check assets/guide-data.js && npm test",
+    "build": "node scripts/build.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

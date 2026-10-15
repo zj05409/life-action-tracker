@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#193b31" />
+    <meta name="description" content="把《高性价比人生指南》变成看得见的日常行动。安排计划、记录习惯，在自己的节奏里好好生活。" />
+    <title>好好生活 · 个人行动指南</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="assets/guide-data.js" defer></script>
+    <script src="state.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#app-content">跳到主要内容</a>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="主导航">
+        <a class="brand" href="#today" aria-label="好好生活首页">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M20 30V19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 23c-8 0-12-5-11-13 8-1 13 4 11 13Z" fill="currentColor"/><path d="M20 19c0-8 4-12 11-12 1 8-3 13-11 12Z" fill="currentColor"/><path d="M11 31h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+          <span class="brand-copy"><strong>好好生活<span class="brand-dot">.</span></strong><span>LIFE, IN PROGRESS</span></span>
+        </a>
+
+        <div class="nav-label">我的生活手册</div>
+        <nav class="primary-nav" aria-label="页面">
+          <button class="nav-item active" data-view="today" type="button" aria-current="page"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4"/></svg><span>今日行动</span><span class="nav-end">↗</span></button>
+          <button class="nav-item" data-view="library" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 6c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v15M6 9h2m-2 4h2m8-4h2m-2 4h2"/></svg><span>完整指南</span></button>
+          <button class="nav-item" data-view="plan" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11M3 5l1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg><span>我的计划</span></button>
+          <button class="nav-item" data-view="review" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 16v-4m6 4V8m6 8V4"/></svg><span>进度回顾</span></button>
+          <button class="nav-item" data-view="settings" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m10 3-1 3-3 1-2 3 2 2v3l3 2 1 3h4l1-3 3-2v-3l2-2-2-3-3-1-1-3h-4Z"/><circle cx="12" cy="11.5" r="3"/></svg><span>数据与设置</span></button>
+        </nav>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-progress-heading"><span class="nav-label">我的实践</span><span class="sidebar-small">持续生长</span></div>
+        <div id="sidebar-progress" class="sidebar-progress" aria-label="整体完成进度"></div>
+
+        <div class="sidebar-bottom">
+          <div class="sidebar-seed" aria-hidden="true"><svg viewBox="0 0 48 40" fill="none"><path d="M24 35V18M24 27c-10 0-15-5-15-14 10 0 15 5 15 14Zm0-8c0-9 5-14 15-14 0 9-5 14-15 14Z" stroke="currentColor" stroke-width="1.3"/><path d="M13 36h22" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+          <p>小步走，也是在前进。</p>
+          <span>给生活一点耐心，给自己一点时间。</span>
+        </div>
+      </aside>
+
+      <div class="main-shell">
+        <header class="topbar">
+          <button class="mobile-menu icon-button" id="mobile-menu" type="button" aria-label="展开导航" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+          <div class="topbar-location"><span class="breadcrumb">我的生活手册<span aria-hidden="true">/</span><span id="view-eyebrow">今日行动</span></span><span id="today-label" class="today-label"></span></div>
+          <div class="topbar-actions">
+            <form id="global-search-form" class="global-search" role="search"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="global-search" type="search" placeholder="搜索指南中的行动…" aria-label="搜索指南中的行动" autocomplete="off" /><kbd>/</kbd></form>
+            <button class="button secondary small export-button" id="export-top" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5"/></svg><span>备份数据</span></button>
+          </div>
+        </header>
+        <main id="app-content" class="app-content" tabindex="-1" aria-label="生活行动追踪">
+          <noscript><div class="empty-state"><h1>让行动开始生长</h1><p>这个工具需要浏览器开启 JavaScript，才能保存你的计划与行动记录。</p></div></noscript>
+        </main>
+        <footer class="main-footer"><span>好好生活，每一步都算数。</span><span>基于《高性价比人生指南》 · 进度保存在当前浏览器</span></footer>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <dialog id="item-dialog" class="item-dialog" aria-label="行动详情"><form method="dialog" class="dialog-close-form"><button id="close-dialog" class="icon-button dialog-close" aria-label="关闭详情" value="close"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form><div id="dialog-content"></div></dialog>
+    <dialog id="confirm-dialog" class="confirm-dialog" aria-label="确认操作"><div id="confirm-content"></div></dialog>
+  </body>
+</html>

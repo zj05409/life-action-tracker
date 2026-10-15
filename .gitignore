@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.DS_Store
+*.log
+test-results/
+playwright-report/
+*进度备份*.json
+*原始数据*.json
