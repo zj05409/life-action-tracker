@@ -237,9 +237,9 @@
     const item = items[0];
     const undoDisabled = !feedSession.history.length || feedBusy;
     const skipped = filteredItems().filter(i => feedSession.seen.has(i.id) && !rec(i.id).planned && rec(i.id).status === 'todo').length;
-    const actions = `<div class="feed-actions"><button class="button feed-skip" data-action="feed-skip"${!item || feedBusy ? ' disabled' : ''}>${icon('left')}<span>稍后看</span></button><button class="button feed-undo" data-action="feed-undo"${undoDisabled ? ' disabled' : ''} aria-label="撤销上一次滑动">${icon('undo')}<span>撤销</span></button><button class="button primary feed-take" data-action="feed-take"${!item || feedBusy ? ' disabled' : ''}><span>今天做</span>${icon('right')}</button></div>`;
+    const actions = `<details class="feed-action-menu"${mobileScreen.matches ? '' : ' open'}><summary aria-label="更多卡片操作">更多</summary><div class="feed-actions"><button class="button feed-skip" data-action="feed-skip"${!item || feedBusy ? ' disabled' : ''}>${icon('left')}<span>稍后看</span></button><button class="button feed-undo" data-action="feed-undo"${undoDisabled ? ' disabled' : ''} aria-label="撤销上一次滑动">${icon('undo')}<span>撤销</span></button><button class="button primary feed-take" data-action="feed-take"${!item || feedBusy ? ' disabled' : ''}><span>今天做</span>${icon('right')}</button></div></details>`;
     return `<div class="feed-topline"><span class="feed-count">${item ? `还有 ${items.length} 条待发现` : '这一轮，先看到这里'}${skipped ? ` · ${skipped} 条稍后看` : ''}</span><button class="button ghost small feed-undo" data-action="feed-undo"${undoDisabled ? ' disabled' : ''}>${icon('undo')}撤销上一步</button></div>
-      <div class="feed-stage">${item ? `<article id="swipe-card" class="swipe-card" data-id="${item.id}" data-item="${item.id}" tabindex="0" aria-label="行动卡片：${esc(item.title)}。左滑稍后看，右滑今天做，也可使用下方按钮。"><span class="swipe-indicator skip" aria-hidden="true">稍后看</span><span class="swipe-indicator take" aria-hidden="true">今天做</span><div class="feed-card-meta"><span>第 ${item.chapter} 章 · ${esc(chapters.get(item.chapter).title)}</span>${tag(`${item.evidence} 级证据`, 'green')}</div><div class="feed-card-body"><span class="feed-card-kicker">一件值得考虑的小事</span><h2 class="feed-card-title">${esc(item.title)}</h2><div class="feed-copy"><span class="field-label">原文 · 说人话</span><p class="feed-summary">${esc(plain(item.summary))}</p><div class="feed-cost"><span class="field-label">需要投入什么</span><p>${esc(plain(item.cost))}</p></div></div><button class="button ghost feed-detail" data-action="detail" data-id="${item.id}">看看完整原文与适用条件 ${icon('arrow')}</button></div><div class="feed-card-footer">${tag(`花钱：${item.tags.money}`)}${tag(`用时：${item.tags.time}`)}${item.tags.audience ? `<span>适用标签：${esc(item.tags.audience)}</span>` : '<span>是否适合自己，可以先看详情</span>'}</div></article>` : empty(skipped ? '今天先挑到这里，也很好。' : '当前条件下的建议已看完', skipped ? `还有 ${skipped} 条留在“稍后看”，需要时可以重新翻一轮。` : '已安排的事项在“今天”和“计划”里，或者换个筛选条件继续发现。', `${skipped ? button('重看稍后事项', 'feed-restart', '', 'primary', 'repeat') : button('换个筛选条件', 'feed-show-filters')}${button('查看今日行动', 'today', '', 'secondary')}`)}</div>${actions}<p class="feed-hint">左滑稍后看 · 右滑安排今天 · 随时撤销<br><span>“稍后”只跳过本轮，已安排的事项可在计划中继续管理。</span></p><p id="feed-live" class="sr-only" aria-live="polite" aria-atomic="true">${item ? `下一条：${esc(item.title)}` : '本轮浏览结束'}</p>`;
+      <div class="feed-stage">${item ? `<article id="swipe-card" class="swipe-card" data-id="${item.id}" data-item="${item.id}" tabindex="0" aria-label="行动卡片：${esc(item.title)}。左滑稍后看，右滑今天做，也可使用更多操作菜单。"><span class="swipe-indicator skip" aria-hidden="true">稍后看</span><span class="swipe-indicator take" aria-hidden="true">今天做</span><div class="feed-card-meta"><span>第 ${item.chapter} 章 · ${esc(chapters.get(item.chapter).title)}</span>${tag(`${item.evidence} 级证据`, 'green')}</div><div class="feed-card-body"><span class="feed-card-kicker">一件值得考虑的小事</span><h2 class="feed-card-title">${esc(item.title)}</h2><div class="feed-copy"><span class="field-label">原文 · 说人话</span><p class="feed-summary">${esc(plain(item.summary))}</p><div class="feed-cost"><span class="field-label">需要投入什么</span><p>${esc(plain(item.cost))}</p></div></div><button class="button ghost feed-detail" data-action="detail" data-id="${item.id}">看看完整原文与适用条件 ${icon('arrow')}</button></div><div class="feed-card-footer">${tag(`花钱：${item.tags.money}`)}${tag(`用时：${item.tags.time}`)}${item.tags.audience ? `<span>适用标签：${esc(item.tags.audience)}</span>` : '<span>是否适合自己，可以先看详情</span>'}</div></article>` : empty(skipped ? '今天先挑到这里，也很好。' : '当前条件下的建议已看完', skipped ? `还有 ${skipped} 条留在“稍后看”，需要时可以重新翻一轮。` : '已安排的事项在“今天”和“计划”里，或者换个筛选条件继续发现。', `${skipped ? button('重看稍后事项', 'feed-restart', '', 'primary', 'repeat') : button('换个筛选条件', 'feed-show-filters')}${button('查看今日行动', 'today', '', 'secondary')}`)}</div>${actions}<p class="feed-hint"><span>← 稍后看</span><span>在卡片上直接滑动</span><span>今天做 →</span></p><p id="feed-live" class="sr-only" aria-live="polite" aria-atomic="true">${item ? `下一条：${esc(item.title)}` : '本轮浏览结束'}</p>`;
   }
   function libraryResults() { return libraryMode === 'feed' ? feedResults() : listResults(); }
   function updateLibraryResults() {
@@ -285,7 +285,11 @@
     feedBusy = false;
     render();
     if (ok) {
-      if (focusAction === 'feed-take' || focusAction === 'feed-skip') document.querySelector(`.feed-actions [data-action="${focusAction}"]`)?.focus({ preventScroll: true });
+      if (focusAction === 'feed-take' || focusAction === 'feed-skip') {
+        const button = document.querySelector(`.feed-actions [data-action="${focusAction}"]`);
+        if (button?.getClientRects().length) button.focus({ preventScroll: true });
+        else $('#swipe-card')?.focus({ preventScroll: true });
+      }
       else if (focusCard) $('#swipe-card')?.focus({ preventScroll: true });
       announceFeed();
       toast(action === 'take' ? '已安排到今天，可以继续发现；点“撤销”可退回。' : '先留到稍后。点“撤销”可以回到这一条。');
@@ -376,7 +380,11 @@
     if (action) swipeFeed(action);
   });
   document.addEventListener('pointercancel', () => cancelGesture());
-  document.addEventListener('lostpointercapture', event => { if (gesture?.pointerId === event.pointerId) cancelGesture(); });
+  document.addEventListener('lostpointercapture', event => {
+    // Touch starts with implicit capture on the title/copy under the finger.
+    // Its bubbled loss is expected when horizontal dragging captures the card.
+    if (gesture?.pointerId === event.pointerId && event.target === gesture.card && !gesture.card.hasPointerCapture(event.pointerId)) cancelGesture();
+  });
   document.addEventListener('click', event => {
     if (performance.now() < suppressCardClickUntil && event.target.closest('.swipe-card')) { event.preventDefault(); event.stopImmediatePropagation(); }
   }, true);
@@ -411,6 +419,8 @@
     cancelGesture();
     document.body.dataset.view = view;
     document.body.classList.toggle('feed-active', view === 'library' && libraryMode === 'feed');
+    document.body.classList.toggle('mobile-layout', mobileScreen.matches);
+    document.body.classList.toggle('is-mobile-feed', mobileScreen.matches && view === 'library' && libraryMode === 'feed');
     document.title = `${views[view]} · 好好生活`;
     $('#today-label').textContent = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
     $('#view-eyebrow').textContent = views[view];
@@ -628,9 +638,21 @@
     if (!modeChosen) libraryMode = mobileScreen.matches ? 'feed' : 'list';
     render();
   });
+  let viewportFrame = 0;
+  function syncViewport() {
+    viewportFrame = 0;
+    const viewport = window.visualViewport;
+    document.documentElement.style.setProperty('--app-viewport-height', `${viewport?.height || innerHeight}px`);
+    document.documentElement.style.setProperty('--app-viewport-top', `${viewport?.offsetTop || 0}px`);
+  }
+  function scheduleViewport() { if (!viewportFrame) viewportFrame = requestAnimationFrame(syncViewport); }
+  window.addEventListener('resize', scheduleViewport);
+  window.visualViewport?.addEventListener('resize', scheduleViewport);
+  window.visualViewport?.addEventListener('scroll', scheduleViewport);
   let lastDate = date();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && lastDate !== date()) { lastDate = date(); render(); } });
   setInterval(() => { if (lastDate !== date()) { lastDate = date(); render(); } }, 60000);
+  syncViewport();
   render();
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     navigator.serviceWorker.register('./sw.js').then(registration => {

@@ -1,6 +1,6 @@
 {
   "name": "life-action-tracker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "把高性价比人生指南变成个人行动计划的静态工具",
   "scripts": {

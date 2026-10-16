@@ -18,7 +18,15 @@ let passed = 0;
 let screenshotDirectory;
 
 function feedButton(page, action) {
-  return page.locator(`.feed-actions [data-action="feed-${action}"]`);
+  return page.locator(`${action === "undo" ? ".feed-topline" : ".feed-actions"} [data-action="feed-${action}"]`);
+}
+
+async function clickFeedButton(page, action, method = 'click', options) {
+  if (action !== 'undo') {
+    const menu = page.locator('.feed-action-menu');
+    if (await menu.getAttribute('open') === null) await menu.locator('summary').click();
+  }
+  await feedButton(page, action)[method](options);
 }
 
 async function readProgress(page) {
@@ -60,7 +68,7 @@ async function historyLength(page, length) {
 async function clickAction(page, action) {
   const before = await readSession(page);
   const id = await currentId(page);
-  await feedButton(page, action).click();
+  await clickFeedButton(page, action);
   await historyLength(page, before.history.length + 1);
   await expect(page.locator('#swipe-card')).not.toHaveAttribute('data-id', id);
   await expect(feedButton(page, 'take')).toBeEnabled();
@@ -68,7 +76,7 @@ async function clickAction(page, action) {
 }
 
 async function undo(page, expectedId, expectedHistoryLength) {
-  await feedButton(page, 'undo').click();
+  await clickFeedButton(page, 'undo');
   await historyLength(page, expectedHistoryLength);
   if (expectedId) await expect(page.locator('#swipe-card')).toHaveAttribute('data-id', expectedId);
 }
@@ -290,13 +298,13 @@ async function run(browser, name, task, options = {}) {
     await run(browser, 'buttons match gestures and rapid double clicks create only one action', async page => {
       await open(page);
       const id = await currentId(page);
-      await feedButton(page, 'skip').dblclick({ delay: 20 });
+      await clickFeedButton(page, 'skip', 'dblclick', { delay: 20 });
       await historyLength(page, 1);
       assert.equal((await readSession(page)).history[0].id, id);
       assert.equal((await readSession(page)).history[0].action, 'skip');
       assert.deepEqual(await readProgress(page), {});
       await undo(page, id, 0);
-      await feedButton(page, 'take').dblclick({ delay: 20 });
+      await clickFeedButton(page, 'take', 'dblclick', { delay: 20 });
       await historyLength(page, 1);
       const records = await readProgress(page);
       assert.deepEqual(Object.keys(records), [id]);
@@ -398,7 +406,7 @@ async function run(browser, name, task, options = {}) {
         });
       }));
       try {
-        await feedButton(page, 'take').click();
+        await clickFeedButton(page, 'take');
         await page.waitForTimeout(250);
         await navigate(page, 'plan');
       } finally { await locker.evaluate(() => window.releaseTestLock()); }
@@ -421,7 +429,7 @@ async function run(browser, name, task, options = {}) {
       });
       await open(page);
       const id = await currentId(page);
-      await feedButton(page, 'take').click();
+      await clickFeedButton(page, 'take');
       await expect(page.locator('#toast')).toContainText('保存失败');
       await expect(feedButton(page, 'take')).toBeEnabled();
       assert.equal(await currentId(page), id);
@@ -450,8 +458,41 @@ async function run(browser, name, task, options = {}) {
       await second.close();
     });
 
+    await run(browser, 'browser bars and keyboard viewport changes keep the card above in-flow tabs', async page => {
+      await page.addInitScript(() => {
+        const viewport = new EventTarget();
+        viewport.height = innerHeight;
+        viewport.offsetTop = 0;
+        window.testViewport = viewport;
+        Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+      });
+      await open(page);
+      for (const { height, top } of [{ height: 640, top: 0 }, { height: 520, top: 0 }, { height: 380, top: 60 }]) {
+        await page.evaluate(({ height, top }) => {
+          window.testViewport.height = height;
+          window.testViewport.offsetTop = top;
+          window.testViewport.dispatchEvent(new Event('resize'));
+          window.testViewport.dispatchEvent(new Event('scroll'));
+        }, { height, top });
+        await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height').trim())).toBe(`${height}px`);
+        const boxes = await page.evaluate(() => {
+          const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+          return { shell: rect('.main-shell'), card: rect('#swipe-card'), tabs: rect('#mobile-nav'), hint: rect('.feed-hint'), tabPosition: getComputedStyle(document.querySelector('#mobile-nav')).position };
+        });
+        assert.ok(Math.abs(boxes.shell.top - top) <= 1 && Math.abs(boxes.shell.height - height) <= 1);
+        assert.equal(boxes.tabPosition, 'static', 'Feed tabs must consume layout space rather than overlay the card.');
+        assert.ok(boxes.tabs.bottom <= top + height + 1);
+        assert.ok(boxes.card.bottom <= boxes.tabs.top && boxes.hint.bottom <= boxes.tabs.top);
+        await expect(page.locator('.feed-actions')).not.toBeVisible();
+        await assertReachable(feedButton(page, 'undo'), 'undo above the card');
+        for (const view of views) await assertReachable(page.locator(`#mobile-nav [data-view="${view}"]`), `${view} in-flow tab`);
+      }
+    });
+
     for (const viewport of [
+      { width: 320, height: 480 },
       { width: 320, height: 568 },
+      { width: 390, height: 600 },
       { width: 375, height: 812 },
       { width: 390, height: 844 },
       { width: 430, height: 932 },
@@ -467,6 +508,11 @@ async function run(browser, name, task, options = {}) {
         await navigate(page, 'library');
         await page.locator('[data-action="library-mode"][data-value="feed"]').click();
         await expect(page.locator('#swipe-card')).toHaveCount(1);
+        await expect(page.locator('.feed-action-menu')).not.toHaveAttribute('open', '');
+        await expect(page.locator('.feed-actions')).not.toBeVisible();
+        await assertReachable(feedButton(page, 'undo'), 'persistent undo');
+        await assertReachable(page.locator('.feed-action-menu > summary'), 'more actions');
+        await page.locator('.feed-action-menu > summary').click();
         for (const action of ['skip', 'undo', 'take']) {
           await assertReachable(feedButton(page, action), `${action} card control`);
         }

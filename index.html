@@ -56,16 +56,17 @@
           <noscript><div class="empty-state"><h1>让行动开始生长</h1><p>这个工具需要浏览器开启 JavaScript，才能保存你的计划与行动记录。</p></div></noscript>
         </main>
         <footer class="main-footer"><span>好好生活，每一步都算数。</span><span>基于《高性价比人生指南》 · 进度保存在当前浏览器</span></footer>
+        <nav id="mobile-nav" class="mobile-bottom-nav" aria-label="手机快捷导航">
+          <button type="button" data-view="library"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/><path d="m13.5 10.5-3 3"/></svg><span>发现</span></button>
+          <button type="button" data-view="today"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4"/></svg><span>今天</span></button>
+          <button type="button" data-view="plan"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11M3 5l1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg><span>计划</span></button>
+          <button type="button" data-view="review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 16v-4m6 4V8m6 8V4"/></svg><span>足迹</span></button>
+          <button type="button" data-view="settings"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg><span>设置</span></button>
+        </nav>
       </div>
     </div>
 
-    <nav id="mobile-nav" class="mobile-bottom-nav" aria-label="手机快捷导航">
-      <button type="button" data-view="library"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/><path d="m13.5 10.5-3 3"/></svg><span>发现</span></button>
-      <button type="button" data-view="today"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4"/></svg><span>今天</span></button>
-      <button type="button" data-view="plan"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11M3 5l1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg><span>计划</span></button>
-      <button type="button" data-view="review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 16v-4m6 4V8m6 8V4"/></svg><span>足迹</span></button>
-      <button type="button" data-view="settings"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg><span>设置</span></button>
-    </nav>
+
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="feed-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <dialog id="item-dialog" class="item-dialog" aria-label="行动详情"><form method="dialog" class="dialog-close-form"><button id="close-dialog" class="icon-button dialog-close" aria-label="关闭详情" value="close"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form><div id="dialog-content"></div></dialog>
