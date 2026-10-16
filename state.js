@@ -94,6 +94,27 @@
     state.updatedAt = now;
     return next;
   }
+  function captureRecord(state, id) {
+    return Object.hasOwn(state.records, id) ? JSON.parse(JSON.stringify(state.records[id])) : null;
+  }
+  function restoreRecord(state, id, before, expectedUpdatedAt, now = new Date().toISOString()) {
+    const current = Object.hasOwn(state.records, id) ? state.records[id] : null;
+    if (!current || current.updatedAt !== expectedUpdatedAt) {
+      const error = new Error('这个事项已有新的修改，无法安全撤销。');
+      error.code = 'UNDO_CONFLICT';
+      throw error;
+    }
+    // Validate everything before changing state, including the snapshot's nested data.
+    const restored = before === null ? null : normalizeRecord(before);
+    if (typeof now !== 'string' || !Number.isFinite(Date.parse(now)) || !validDay(now.slice(0, 10))) throw new Error('撤销时间无效。');
+    // A second undo must not match the original revision, even within one millisecond.
+    const revision = now === expectedUpdatedAt ? new Date(Date.parse(now) + 1).toISOString() : now;
+    if (!validDay(revision.slice(0, 10))) throw new Error('撤销时间无效。');
+    if (restored) { restored.updatedAt = revision; state.records[id] = restored; }
+    else delete state.records[id];
+    state.updatedAt = revision;
+    return restored;
+  }
   function complete(state, id, day = dayKey(), now = new Date().toISOString()) {
     const current = get(state, id);
     if (current.recurrence !== 'once') {
@@ -137,5 +158,5 @@
     next.updatedAt = now;
     return next;
   }
-  return { KEY, SCHEMA, STATUSES, RECURRENCES, dayKey, validDay, shiftDay, monday, fresh, record, get, validate, load, save, update, complete, isChecked, cycleDone, isDue, events, merge };
+  return { KEY, SCHEMA, STATUSES, RECURRENCES, dayKey, validDay, shiftDay, monday, fresh, record, get, validate, load, save, update, captureRecord, restoreRecord, complete, isChecked, cycleDone, isDue, events, merge };
 });

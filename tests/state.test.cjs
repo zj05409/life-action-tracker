@@ -295,3 +295,96 @@ test('progress events count completions and check-ins by the local calendar day'
   S.complete(state, 'exercise', '2026-10-15', LATER);
   assert.deepEqual(S.events(state), { '2026-10-14': 1 });
 });
+
+test('undoing the first action removes the record instead of leaving a default plan', () => {
+  const state = S.fresh(CREATED);
+  const before = S.captureRecord(state, 'learn');
+  assert.equal(before, null);
+  S.update(state, 'budget', { note: 'another item' }, EARLIER);
+  S.update(state, 'learn', { planned: true, status: 'done', completedAt: LATER }, LATER);
+  const restored = S.restoreRecord(state, 'learn', before, LATER, '2026-10-16T00:00:00.000Z');
+  assert.equal(restored, null);
+  assert.equal(Object.hasOwn(state.records, 'learn'), false);
+  assert.equal(S.get(state, 'learn').planned, false);
+  assert.equal(S.get(state, 'budget').note, 'another item');
+  assert.equal(state.updatedAt, '2026-10-16T00:00:00.000Z');
+  const after = JSON.stringify(state);
+  assert.throws(() => S.restoreRecord(state, 'learn', before, LATER), { code: 'UNDO_CONFLICT' });
+  assert.equal(JSON.stringify(state), after);
+});
+
+test('undo restores the full previous record and gives it a fresh revision', () => {
+  const state = backup({ exercise: makeRecord({
+    status: 'doing', planned: true, recurrence: 'weekly', focusDate: '2026-10-12', dueDate: '2026-11-01',
+    note: '保留原有笔记', steps: [{ id: 'first', title: '已有步骤', done: true }], checks: ['2026-10-13'], updatedAt: EARLIER,
+  }) });
+  const before = S.captureRecord(state, 'exercise');
+  S.update(state, 'exercise', { status: 'na', planned: false, note: 'temporary edit', steps: [], checks: [] }, LATER);
+  const undoneAt = '2026-10-16T01:00:00.000Z';
+  const restored = S.restoreRecord(state, 'exercise', before, LATER, undoneAt);
+  assert.deepEqual(restored, { ...before, updatedAt: undoneAt });
+  assert.equal(state.records.exercise, restored);
+  assert.equal(state.updatedAt, undoneAt);
+  assert.equal(S.isDue(restored, '2026-10-15'), false, 'restored earlier weekly check-in still satisfies the cycle');
+  assert.deepEqual(S.events(state), { '2026-10-13': 1 });
+  before.checks.push('2026-10-14');
+  before.steps[0].done = false;
+  assert.deepEqual(restored.checks, ['2026-10-13']);
+  assert.equal(restored.steps[0].done, true);
+});
+
+test('capture snapshots are independent of both live records and other captures', () => {
+  const state = backup({ learn: makeRecord({ note: 'original', steps: [{ id: 'x', title: 'step', done: false }], checks: ['2026-10-14'] }) });
+  const snapshot = S.captureRecord(state, 'learn');
+  const secondSnapshot = S.captureRecord(state, 'learn');
+  snapshot.note = 'snapshot edit';
+  snapshot.steps[0].done = true;
+  snapshot.checks.push('2026-10-15');
+  assert.equal(state.records.learn.note, 'original');
+  assert.equal(state.records.learn.steps[0].done, false);
+  assert.deepEqual(state.records.learn.checks, ['2026-10-14']);
+  assert.deepEqual(secondSnapshot, state.records.learn);
+  assert.equal(S.captureRecord(state, 'toString'), null, 'prototype properties are not records');
+});
+
+test('undo refuses any newer same-item note, check-in, or completion without side effects', () => {
+  const concurrentAt = '2026-10-16T02:00:00.000Z';
+  for (const concurrentPatch of [
+    { note: 'another tab wrote this' },
+    { recurrence: 'daily', checks: ['2026-10-15', '2026-10-16'] },
+    { status: 'done', completedAt: concurrentAt },
+  ]) {
+    const state = backup({ learn: makeRecord({ note: 'before', updatedAt: EARLIER }) });
+    const snapshot = S.captureRecord(state, 'learn');
+    S.update(state, 'learn', { planned: true }, LATER);
+    S.update(state, 'learn', concurrentPatch, concurrentAt);
+    const changed = JSON.stringify(state);
+    assert.throws(() => S.restoreRecord(state, 'learn', snapshot, LATER), { code: 'UNDO_CONFLICT' });
+    assert.equal(JSON.stringify(state), changed);
+  }
+});
+
+test('undo rejects an old revision after an earlier undo, including an identical clock tick', () => {
+  const state = backup({ learn: makeRecord({ note: 'before', updatedAt: EARLIER }) });
+  const before = S.captureRecord(state, 'learn');
+  S.update(state, 'learn', { note: 'after' }, LATER);
+  const restored = S.restoreRecord(state, 'learn', before, LATER, LATER);
+  assert.notEqual(restored.updatedAt, LATER);
+  assert.equal(state.updatedAt, restored.updatedAt);
+  const after = JSON.stringify(state);
+  assert.throws(() => S.restoreRecord(state, 'learn', before, LATER, '2026-10-16T00:00:00.000Z'), { code: 'UNDO_CONFLICT' });
+  assert.equal(JSON.stringify(state), after);
+});
+
+test('invalid undo snapshots or clocks leave all live state unchanged', () => {
+  const state = backup({ learn: makeRecord({ planned: true, note: 'keep', updatedAt: LATER }) });
+  const original = JSON.stringify(state);
+  for (const invalid of [undefined, [], 'invalid', makeRecord({ status: 'unknown' }), makeRecord({ checks: ['2026-02-30'] }), makeRecord({ steps: [{ id: 'x', title: 'step', done: 'false' }] })]) {
+    assert.throws(() => S.restoreRecord(state, 'learn', invalid, LATER));
+    assert.equal(JSON.stringify(state), original);
+  }
+  for (const now of ['', '2026-02-30T00:00:00Z', 'not-a-date']) {
+    assert.throws(() => S.restoreRecord(state, 'learn', null, LATER, now));
+    assert.equal(JSON.stringify(state), original);
+  }
+});

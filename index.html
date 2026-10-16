@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#193b31" />
     <meta name="description" content="把《高性价比人生指南》变成看得见的日常行动。安排计划、记录习惯，在自己的节奏里好好生活。" />
     <title>好好生活 · 个人行动指南</title>
@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="styles.css" />
     <script src="assets/guide-data.js" defer></script>
     <script src="state.js" defer></script>
+    <script src="gestures.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -58,7 +59,15 @@
       </div>
     </div>
 
+    <nav id="mobile-nav" class="mobile-bottom-nav" aria-label="手机快捷导航">
+      <button type="button" data-view="library"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/><path d="m13.5 10.5-3 3"/></svg><span>发现</span></button>
+      <button type="button" data-view="today"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4"/></svg><span>今天</span></button>
+      <button type="button" data-view="plan"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11M3 5l1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg><span>计划</span></button>
+      <button type="button" data-view="review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 16v-4m6 4V8m6 8V4"/></svg><span>足迹</span></button>
+      <button type="button" data-view="settings"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg><span>设置</span></button>
+    </nav>
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="feed-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <dialog id="item-dialog" class="item-dialog" aria-label="行动详情"><form method="dialog" class="dialog-close-form"><button id="close-dialog" class="icon-button dialog-close" aria-label="关闭详情" value="close"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form><div id="dialog-content"></div></dialog>
     <dialog id="confirm-dialog" class="confirm-dialog" aria-label="确认操作"><div id="confirm-content"></div></dialog>
   </body>

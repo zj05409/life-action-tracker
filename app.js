@@ -2,6 +2,7 @@
   'use strict';
   const D = globalThis.GUIDE_DATA;
   const S = globalThis.LifeState;
+  const G = globalThis.SwipeGesture;
   const $ = selector => document.querySelector(selector);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const plain = text => String(text || '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`#]/g, '').replace(/<!--[^]*?-->/g, '').trim();
@@ -14,7 +15,8 @@
     calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     download: '<path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     repeat: '<path d="m17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3"/>',
-    close: '<path d="m6 6 12 12M6 18 18 6"/>', settings: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'
+    close: '<path d="m6 6 12 12M6 18 18 6"/>', settings: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>',
+    undo: '<path d="m9 4-5 5 5 5M4 9h10a6 6 0 0 1 0 12"/>', left: '<path d="m14 6-6 6 6 6"/>', right: '<path d="m10 6 6 6-6 6"/>', filter: '<path d="M4 7h16M7 12h10M10 17h4"/>'
   };
   const icon = name => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.leaf}</svg>`;
   const ids = new Set(D.items.map(item => item.id));
@@ -30,7 +32,15 @@
     state = S.fresh();
     storageWarning = '浏览器中的旧进度无法读取。原数据已保留；请先在“数据与设置”导出原始数据，再恢复备份。';
   }
-  let view = Object.hasOwn(views, location.hash.slice(1)) ? location.hash.slice(1) : 'today';
+  const mobileScreen = matchMedia('(max-width: 760px), (max-width: 1000px) and (max-height: 520px) and (pointer: coarse)');
+  let view = Object.hasOwn(views, location.hash.slice(1)) ? location.hash.slice(1) : mobileScreen.matches ? 'library' : 'today';
+  let libraryMode = mobileScreen.matches ? 'feed' : 'list';
+  let modeChosen = false;
+  let feedFiltersOpen = false;
+  let feedBusy = false;
+  let preferredFeedId = '';
+  let gesture = null;
+  let suppressCardClickUntil = 0;
   let filters = { query: '', chapter: '', evidence: '', money: '', time: '', status: '', group: '', quick: '' };
   let planStatus = 'active';
   let page = 1;
@@ -40,6 +50,52 @@
   let toastTimer;
   const date = () => S.dayKey();
   const rec = id => S.get(state, id);
+  const FEED_KEY = 'life-in-progress.feed-session.v1';
+  function cleanFilters(input) {
+    const result = { query: '', chapter: '', evidence: '', money: '', time: '', status: '', group: '', quick: '' };
+    for (const key of Object.keys(result)) if (typeof input?.[key] === 'string') result[key] = input[key].slice(0, 1000);
+    if (!['', 'health', 'money', 'family', 'life'].includes(result.group)) result.group = '';
+    return result;
+  }
+  function loadFeedSession() {
+    const emptySession = { seen: new Set(), history: [] };
+    try {
+      const input = JSON.parse(sessionStorage.getItem(FEED_KEY) || 'null');
+      if (input?.version !== 1 || !Array.isArray(input.seen) || !Array.isArray(input.history)) return emptySession;
+      const seen = new Set(input.seen.filter(id => ids.has(id)).slice(0, D.items.length));
+      const history = [];
+      for (const entry of input.history.slice(-30)) {
+        if (!ids.has(entry.id) || !['skip', 'take'].includes(entry.action)) continue;
+        let before = null;
+        let afterRecord = null;
+        if (entry.action === 'take') {
+          if (typeof entry.afterUpdatedAt !== 'string' || !Number.isFinite(Date.parse(entry.afterUpdatedAt))) continue;
+          if (entry.before !== null) before = S.validate({ ...S.fresh(), records: { [entry.id]: entry.before } }, ids).state.records[entry.id];
+          if (!entry.afterRecord) continue;
+          afterRecord = S.validate({ ...S.fresh(), records: { [entry.id]: entry.afterRecord } }, ids).state.records[entry.id];
+        }
+        history.push({ id: entry.id, action: entry.action, before, afterRecord, afterUpdatedAt: entry.afterUpdatedAt || '', filters: cleanFilters(entry.filters) });
+      }
+      return { seen, history };
+    } catch { return emptySession; }
+  }
+  let feedSession = loadFeedSession();
+  function rememberFeed() {
+    try { sessionStorage.setItem(FEED_KEY, JSON.stringify({ version: 1, seen: [...feedSession.seen], history: feedSession.history })); }
+    catch { /* Browsing still works in memory if session storage is unavailable. */ }
+  }
+  function rememberSwipe(entry) {
+    feedSession.seen.add(entry.id);
+    feedSession.history.push(entry);
+    if (feedSession.history.length > 30) feedSession.history.shift();
+    preferredFeedId = '';
+    rememberFeed();
+  }
+  function clearFeedSession() {
+    feedSession = { seen: new Set(), history: [] };
+    preferredFeedId = '';
+    try { sessionStorage.removeItem(FEED_KEY); } catch { /* In-memory undo is cleared even when browser storage is restricted. */ }
+  }
   const formatDate = day => day ? new Date(`${day}T12:00:00`).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }) : '';
   function toast(message) {
     $('#toast').textContent = message;
@@ -50,7 +106,7 @@
   function exclusive(operation) {
     return navigator.locks ? navigator.locks.request(S.KEY, operation) : Promise.resolve().then(operation);
   }
-  async function commit(operation, message) {
+  async function commit(operation, message, deferRender = false) {
     const apply = () => {
       if (storageWarning) { toast('请先导出原始数据并恢复备份，避免覆盖尚未读取的进度。'); return false; }
       let before = JSON.stringify(state);
@@ -64,10 +120,13 @@
         state = JSON.parse(before);
         if (error.code === 'CONFLICT') {
           confirmAction('这个事项在另一标签页更新了', '本页草稿已保留。继续保存将使用本页的状态、日期、笔记和步骤，其他标签页的打卡仍会保留。', '保存本页草稿', () => saveDetail(error.today, true));
-        } else toast('保存失败，修改未生效。请检查浏览器存储空间或隐私设置，并先导出备份。');
+        } else if (error.code === 'UNDO_CONFLICT') toast('这条事项后来又有修改，已保留最新进度；可在计划中查看。');
+        else if (error.code === 'FEED_CHANGED') toast('这条事项的状态已改变，已保留最新进度并更新信息流。');
+        else if (error.code === 'FEED_CANCELLED') { /* Navigation or filtering cancelled the pending swipe. */ }
+        else toast('保存失败，修改未生效。请检查浏览器存储空间或隐私设置，并先导出备份。');
         return false;
       }
-      render();
+      if (!deferRender) render();
       if (message) toast(message);
       return true;
     };
@@ -162,19 +221,165 @@
   function select(name, label, options, current, extra = '') {
     return `<label class="field"><span class="field-label">${label}</span><select ${extra} name="${name}" aria-label="${label}"><option value="">全部${label}</option>${options.map(([value, text]) => `<option value="${esc(value)}"${String(value) === String(current) ? ' selected' : ''}>${esc(text)}</option>`).join('')}</select></label>`;
   }
-  function libraryResults() {
+  function listResults() {
     const items = filteredItems();
     const pages = Math.max(1, Math.ceil(items.length / 15));
     page = Math.min(page, pages);
     return `<div class="results-heading"><p class="subtitle">找到 <strong>${items.length}</strong> 条建议 · 第 ${page} / ${pages} 页</p><p class="subtitle">A / B / C 为原指南的证据分级</p></div><div class="task-list">${items.length ? items.slice((page - 1) * 15, page * 15).map(i => card(i)).join('') : empty('暂时没有匹配的事项', '试着减少筛选条件，或换一个关键词。', button('清除筛选', 'clear-filters'))}</div>${pages > 1 ? `<div class="pagination"><button class="button secondary small" data-action="prev-page"${page === 1 ? ' disabled' : ''}>上一页</button><span>第 ${page} / ${pages} 页</span><button class="button secondary small" data-action="next-page"${page === pages ? ' disabled' : ''}>下一页</button></div>` : ''}`;
   }
+  function feedItems() {
+    const result = filteredItems().filter(item => !feedSession.seen.has(item.id) && !rec(item.id).planned && rec(item.id).status === 'todo');
+    if (preferredFeedId) result.sort((a, b) => Number(b.id === preferredFeedId) - Number(a.id === preferredFeedId));
+    return result;
+  }
+  function feedResults() {
+    const items = feedItems();
+    const item = items[0];
+    const undoDisabled = !feedSession.history.length || feedBusy;
+    const skipped = filteredItems().filter(i => feedSession.seen.has(i.id) && !rec(i.id).planned && rec(i.id).status === 'todo').length;
+    const actions = `<div class="feed-actions"><button class="button feed-skip" data-action="feed-skip"${!item || feedBusy ? ' disabled' : ''}>${icon('left')}<span>稍后看</span></button><button class="button feed-undo" data-action="feed-undo"${undoDisabled ? ' disabled' : ''} aria-label="撤销上一次滑动">${icon('undo')}<span>撤销</span></button><button class="button primary feed-take" data-action="feed-take"${!item || feedBusy ? ' disabled' : ''}><span>今天做</span>${icon('right')}</button></div>`;
+    return `<div class="feed-topline"><span class="feed-count">${item ? `还有 ${items.length} 条待发现` : '这一轮，先看到这里'}${skipped ? ` · ${skipped} 条稍后看` : ''}</span><button class="button ghost small feed-undo" data-action="feed-undo"${undoDisabled ? ' disabled' : ''}>${icon('undo')}撤销上一步</button></div>
+      <div class="feed-stage">${item ? `<article id="swipe-card" class="swipe-card" data-id="${item.id}" data-item="${item.id}" tabindex="0" aria-label="行动卡片：${esc(item.title)}。左滑稍后看，右滑今天做，也可使用下方按钮。"><span class="swipe-indicator skip" aria-hidden="true">稍后看</span><span class="swipe-indicator take" aria-hidden="true">今天做</span><div class="feed-card-meta"><span>第 ${item.chapter} 章 · ${esc(chapters.get(item.chapter).title)}</span>${tag(`${item.evidence} 级证据`, 'green')}</div><div class="feed-card-body"><span class="feed-card-kicker">一件值得考虑的小事</span><h2 class="feed-card-title">${esc(item.title)}</h2><div class="feed-copy"><span class="field-label">原文 · 说人话</span><p class="feed-summary">${esc(plain(item.summary))}</p><div class="feed-cost"><span class="field-label">需要投入什么</span><p>${esc(plain(item.cost))}</p></div></div><button class="button ghost feed-detail" data-action="detail" data-id="${item.id}">看看完整原文与适用条件 ${icon('arrow')}</button></div><div class="feed-card-footer">${tag(`花钱：${item.tags.money}`)}${tag(`用时：${item.tags.time}`)}${item.tags.audience ? `<span>适用标签：${esc(item.tags.audience)}</span>` : '<span>是否适合自己，可以先看详情</span>'}</div></article>` : empty(skipped ? '今天先挑到这里，也很好。' : '当前条件下的建议已看完', skipped ? `还有 ${skipped} 条留在“稍后看”，需要时可以重新翻一轮。` : '已安排的事项在“今天”和“计划”里，或者换个筛选条件继续发现。', `${skipped ? button('重看稍后事项', 'feed-restart', '', 'primary', 'repeat') : button('换个筛选条件', 'feed-show-filters')}${button('查看今日行动', 'today', '', 'secondary')}`)}</div>${actions}<p class="feed-hint">左滑稍后看 · 右滑安排今天 · 随时撤销<br><span>“稍后”只跳过本轮，已安排的事项可在计划中继续管理。</span></p><p id="feed-live" class="sr-only" aria-live="polite" aria-atomic="true">${item ? `下一条：${esc(item.title)}` : '本轮浏览结束'}</p>`;
+  }
+  function libraryResults() { return libraryMode === 'feed' ? feedResults() : listResults(); }
+  function updateLibraryResults() {
+    const container = $('#library-results');
+    if (!container) return;
+    cancelGesture();
+    container.innerHTML = libraryResults();
+  }
   function libraryView() {
     const money = [...new Set(D.items.map(i => i.tags.money).filter(Boolean))].sort();
     const time = [...new Set(D.items.map(i => i.tags.time).filter(Boolean))].sort();
-    return `${heading('YOUR GUIDE TO A BETTER EVERYDAY', '完整指南', `${D.chapters.length} 个章节，${D.items.length} 条建议。每一条，都可以成为你的下一步。`)}
-      <div class="filter-group">${[['', '全部领域'], ['health', '健康与安全'], ['money', '金钱与工作'], ['family', '关系与家庭'], ['life', '生活与权益']].map(([key, label]) => `<button class="chip${filters.group === key ? ' active' : ''}" data-action="group" data-value="${key}">${label}</button>`).join('')}<button class="chip${filters.quick ? ' active' : ''}" data-action="quick">${icon('leaf')}低成本 · 少用时</button></div>
-      <section class="panel filter-panel"><label class="field library-search"><span class="field-label">搜一件你在意的事</span><input id="library-query" class="search-input" type="search" placeholder="搜索建议、正文或章节，比如：睡眠、密码、租房…" value="${esc(filters.query)}"></label><div class="toolbar" id="library-filters">${select('chapter', '章节', D.chapters.map(c => [c.id, `${c.id}. ${c.title}`]), filters.chapter)}${select('evidence', '证据', ['A', 'B', 'C'].map(v => [v, `${v} 级`]), filters.evidence)}${select('money', '花钱', money.map(v => [v, v]), filters.money)}${select('time', '用时', time.map(v => [v, v]), filters.time)}${select('status', '状态', Object.entries(statusText), filters.status)}${button('重置', 'clear-filters', '', 'ghost small')}</div></section><section id="library-results" class="panel">${libraryResults()}</section>`;
+    const isFeed = libraryMode === 'feed';
+    const filterCount = Object.values(filters).filter(Boolean).length;
+    const modes = `<div class="library-mode segmented" aria-label="指南浏览方式"><button data-action="library-mode" data-value="feed" class="${isFeed ? 'active' : ''}" aria-pressed="${isFeed}">逐条发现</button><button data-action="library-mode" data-value="list" class="${!isFeed ? 'active' : ''}" aria-pressed="${!isFeed}">完整列表</button></div>`;
+    return `<div class="library-view ${isFeed ? 'is-feed' : 'is-list'}"><div class="library-heading">${heading('ONE GOOD STEP AT A TIME', isFeed ? '发现下一步' : '完整指南', isFeed ? '一次看一条，挑一件今天想做的。' : `${D.chapters.length} 个章节，${D.items.length} 条建议。每一条，都可以成为你的下一步。`)}${modes}</div>
+      <div class="feed-toolbar"><label class="field library-search"><span class="field-label">搜一件你在意的事</span><input id="library-query" class="search-input" type="search" placeholder="搜索建议，比如：睡眠、密码、租房…" value="${esc(filters.query)}"></label>${isFeed ? `<button class="button secondary feed-filter-toggle" data-action="toggle-feed-filters" aria-expanded="${feedFiltersOpen}" aria-controls="guide-filter-panel">${icon('filter')}筛选${filterCount ? ` ${filterCount}` : ''}</button>` : ''}</div>
+      <section id="guide-filter-panel" class="feed-filters panel filter-panel"${isFeed && !feedFiltersOpen ? ' hidden' : ''}><div class="filter-group">${[['', '全部领域'], ['health', '健康与安全'], ['money', '金钱与工作'], ['family', '关系与家庭'], ['life', '生活与权益']].map(([key, label]) => `<button class="chip${filters.group === key ? ' active' : ''}" data-action="group" data-value="${key}">${label}</button>`).join('')}<button class="chip${filters.quick ? ' active' : ''}" data-action="quick">${icon('leaf')}低成本 · 少用时</button></div><div class="toolbar" id="library-filters">${select('chapter', '章节', D.chapters.map(c => [c.id, `${c.id}. ${c.title}`]), filters.chapter)}${select('evidence', '证据', ['A', 'B', 'C'].map(v => [v, `${v} 级`]), filters.evidence)}${select('money', '花钱', money.map(v => [v, v]), filters.money)}${select('time', '用时', time.map(v => [v, v]), filters.time)}${!isFeed ? select('status', '状态', Object.entries(statusText), filters.status) : ''}${button('重置', 'clear-filters', '', 'ghost small')}</div></section><section id="library-results" class="${isFeed ? 'feed-results' : 'panel'}">${libraryResults()}</section></div>`;
   }
+  async function swipeFeed(action) {
+    const card = $('#swipe-card');
+    if (feedBusy || !card || !['skip', 'take'].includes(action)) return;
+    const id = card.dataset.id;
+    const focusAction = document.activeElement?.dataset.action;
+    const focusCard = document.activeElement === card;
+    const entry = { id, action, before: null, afterRecord: null, afterUpdatedAt: '', filters: { ...filters } };
+    feedBusy = true;
+    document.querySelectorAll('[data-action^="feed-"]').forEach(button => { button.disabled = true; });
+    card.classList.add(action === 'take' ? 'is-leaving-right' : 'is-leaving-left');
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) await new Promise(resolve => setTimeout(resolve, 200));
+    if (!card.isConnected) { feedBusy = false; render(); return; }
+    let ok = true;
+    if (action === 'take') {
+      ok = await commit(() => {
+        if (!card.isConnected) { const error = new Error('feed cancelled'); error.code = 'FEED_CANCELLED'; throw error; }
+        const current = rec(id);
+        if (current.planned || current.status !== 'todo') { const error = new Error('feed changed'); error.code = 'FEED_CHANGED'; throw error; }
+        entry.before = S.captureRecord(state, id);
+        entry.afterUpdatedAt = S.update(state, id, { planned: true, status: 'doing', focusDate: date() }).updatedAt;
+        entry.afterRecord = S.captureRecord(state, id);
+      }, '', true);
+    }
+    if (ok) rememberSwipe(entry);
+    feedBusy = false;
+    render();
+    if (ok) {
+      if (focusAction === 'feed-take' || focusAction === 'feed-skip') document.querySelector(`.feed-actions [data-action="${focusAction}"]`)?.focus({ preventScroll: true });
+      else if (focusCard) $('#swipe-card')?.focus({ preventScroll: true });
+      announceFeed();
+      toast(action === 'take' ? '已安排到今天，可以继续发现；点“撤销”可退回。' : '先留到稍后。点“撤销”可以回到这一条。');
+    }
+  }
+  async function undoFeed() {
+    if (feedBusy || !feedSession.history.length) return;
+    feedBusy = true;
+    const entry = feedSession.history[feedSession.history.length - 1];
+    let conflict = false;
+    let ok = true;
+    if (entry.action === 'take') {
+      ok = await commit(() => {
+        try {
+          // Imports may merge old check-ins without advancing the item timestamp.
+          // Compare all fields as well, so undo never discards those newer changes.
+          if (JSON.stringify(S.captureRecord(state, entry.id)) !== JSON.stringify(entry.afterRecord)) { const error = new Error('undo conflict'); error.code = 'UNDO_CONFLICT'; throw error; }
+          S.restoreRecord(state, entry.id, entry.before, entry.afterUpdatedAt);
+        }
+        catch (error) { conflict = error.code === 'UNDO_CONFLICT'; throw error; }
+      }, '', true);
+    }
+    if (ok || conflict) {
+      feedSession.history.pop();
+      if (ok) {
+        feedSession.seen.delete(entry.id);
+        preferredFeedId = entry.id;
+        filters = cleanFilters(entry.filters);
+      }
+      rememberFeed();
+    }
+    feedBusy = false;
+    render();
+    if (ok) {
+      $('#swipe-card')?.focus({ preventScroll: true });
+      announceFeed();
+      toast(entry.action === 'take' ? '已撤销“今天做”，原来的笔记和计划状态已恢复。' : '已撤销“稍后看”，回到上一条。');
+    }
+  }
+  function announceFeed() {
+    const announcer = $('#feed-announcer');
+    if (announcer) announcer.textContent = $('#feed-live')?.textContent || '';
+  }
+  function cancelGesture(reset = true) {
+    if (!gesture) return;
+    const { card, pointerId } = gesture;
+    gesture = null;
+    try { if (card.hasPointerCapture(pointerId)) card.releasePointerCapture(pointerId); } catch { /* The card may have been re-rendered. */ }
+    card.classList.remove('is-dragging');
+    if (reset) {
+      card.classList.remove('swipe-left', 'swipe-right');
+      for (const name of ['--swipe-x', '--swipe-rotation', '--swipe-progress']) card.style.removeProperty(name);
+    }
+  }
+  document.addEventListener('pointerdown', event => {
+    const card = event.target.closest('#swipe-card');
+    if (!card || feedBusy || event.button !== 0 || event.isPrimary === false || event.target.closest('button, a, input, select, textarea, summary')) return;
+    // Leave the OS/browser edge-back gesture available.
+    if (event.clientX < 24 || event.clientX > innerWidth - 24) return;
+    gesture = { card, pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0, intent: 'pending' };
+  });
+  document.addEventListener('pointermove', event => {
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const current = gesture;
+    current.dx = event.clientX - current.x;
+    current.dy = event.clientY - current.y;
+    if (current.intent === 'pending') {
+      current.intent = G.intent(current.dx, current.dy);
+      if (current.intent === 'vertical') { cancelGesture(); return; }
+      if (current.intent !== 'horizontal') return;
+      try { current.card.setPointerCapture(event.pointerId); } catch { /* Not all pointer types support capture. */ }
+      current.card.classList.add('is-dragging');
+    }
+    if (event.cancelable) event.preventDefault();
+    const width = current.card.getBoundingClientRect().width;
+    current.card.style.setProperty('--swipe-x', `${current.dx}px`);
+    current.card.style.setProperty('--swipe-rotation', `${current.dx / width * 9}deg`);
+    current.card.style.setProperty('--swipe-progress', String(Math.min(1, Math.abs(current.dx) / Math.max(56, Math.min(100, width * .25)))));
+    current.card.classList.toggle('swipe-left', current.dx < 0);
+    current.card.classList.toggle('swipe-right', current.dx > 0);
+  }, { passive: false });
+  document.addEventListener('pointerup', event => {
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const current = gesture;
+    const action = current.intent === 'horizontal' ? G.decision(event.clientX - current.x, event.clientY - current.y, current.card.getBoundingClientRect().width) : null;
+    if (current.intent === 'horizontal') suppressCardClickUntil = performance.now() + 450;
+    cancelGesture(!action);
+    if (action) swipeFeed(action);
+  });
+  document.addEventListener('pointercancel', () => cancelGesture());
+  document.addEventListener('lostpointercapture', event => { if (gesture?.pointerId === event.pointerId) cancelGesture(); });
+  document.addEventListener('click', event => {
+    if (performance.now() < suppressCardClickUntil && event.target.closest('.swipe-card')) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
   function planView() {
     const items = D.items.filter(item => { const r = rec(item.id); if (!r.planned && r.status !== 'na') return false; return planStatus === 'all' || (planStatus === 'active' ? !['done', 'na'].includes(r.status) : planStatus === 'habit' ? r.recurrence !== 'once' && !['done', 'na'].includes(r.status) : r.status === planStatus); }).sort((a, b) => (rec(a.id).dueDate || '9999').localeCompare(rec(b.id).dueDate || '9999'));
     const habitCount = D.items.filter(i => rec(i.id).planned && rec(i.id).recurrence !== 'once' && !['done', 'na'].includes(rec(i.id).status)).length;
@@ -203,10 +408,13 @@
       ${panel('清空进度', `<p class="subtitle">清空会移除计划、笔记、步骤和所有打卡。建议先导出一份备份。</p>${button('清空本浏览器进度', 'reset', '', 'ghost danger')}`)}</div>`;
   }
   function render() {
+    cancelGesture();
+    document.body.dataset.view = view;
+    document.body.classList.toggle('feed-active', view === 'library' && libraryMode === 'feed');
     document.title = `${views[view]} · 好好生活`;
     $('#today-label').textContent = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
     $('#view-eyebrow').textContent = views[view];
-    document.querySelectorAll('[data-view]').forEach(nav => {
+    document.querySelectorAll('button[data-view]').forEach(nav => {
       nav.classList.toggle('active', nav.dataset.view === view);
       if (nav.dataset.view === view) nav.setAttribute('aria-current', 'page'); else nav.removeAttribute('aria-current');
     });
@@ -308,7 +516,7 @@
         if (recover) {
           await exclusive(() => {
             const previous = state;
-            try { S.save(localStorage, parsed.state); state = parsed.state; storageWarning = ''; render(); toast('进度已恢复'); }
+            try { S.save(localStorage, parsed.state); state = parsed.state; storageWarning = ''; clearFeedSession(); render(); toast('进度已恢复'); }
             catch { state = previous; toast('恢复失败，浏览器数据未改变。'); }
           });
         } else commit(() => { state = S.merge(state, parsed.state); }, '备份已合并');
@@ -321,14 +529,22 @@
       $('#sidebar').classList.remove('is-open');
       $('#mobile-menu').setAttribute('aria-expanded', 'false');
     }
-    const nav = event.target.closest('[data-view]');
+    const nav = event.target.closest('button[data-view]');
     if (nav) { navigate(nav.dataset.view); return; }
     const el = event.target.closest('[data-action]');
     if (!el) return;
+    if (feedBusy && el.dataset.action.startsWith('feed-')) return;
     const id = el.dataset.id;
     switch (el.dataset.action) {
       case 'today': case 'library': case 'plan': case 'review': case 'settings': navigate(el.dataset.action); break;
       case 'detail': openDetail(id); break;
+      case 'library-mode': libraryMode = el.dataset.value === 'feed' ? 'feed' : 'list'; modeChosen = true; if (libraryMode === 'feed') filters.status = ''; preferredFeedId = ''; render(); break;
+      case 'toggle-feed-filters': feedFiltersOpen = !feedFiltersOpen; render(); break;
+      case 'feed-show-filters': feedFiltersOpen = true; render(); $('#guide-filter-panel').scrollIntoView({ block: 'start', behavior: 'smooth' }); break;
+      case 'feed-skip': swipeFeed('skip'); break;
+      case 'feed-take': swipeFeed('take'); break;
+      case 'feed-undo': undoFeed(); break;
+      case 'feed-restart': feedSession.seen.clear(); feedSession.history = []; preferredFeedId = ''; rememberFeed(); render(); toast('稍后事项已回到信息流，新的一轮开始了。'); break;
       case 'add': commit(() => S.update(state, id, { planned: true, status: 'todo' }), '已加入我的计划；点“今天做”可安排到今天'); break;
       case 'focus': commit(() => S.update(state, id, { planned: true, status: 'doing', focusDate: date() }), '已加入今日行动'); break;
       case 'complete': {
@@ -360,12 +576,12 @@
       case 'export-raw': try { download(localStorage.getItem(S.KEY) || '{}', `好好生活-原始数据-${date()}.json`); } catch { toast('浏览器禁止读取存储，请检查浏览器设置。'); } break;
       case 'recover': recovering = true; $('#import-file').click(); break;
       case 'reset': confirmAction('清空当前浏览器的全部进度？', '所有计划、笔记、步骤、习惯打卡和周目标都会清空。此操作无法撤销；导出的备份可以重新导入。', '清空进度', async () => exclusive(() => {
-        try { localStorage.removeItem(S.KEY); state = S.fresh(); storageWarning = ''; render(); toast('进度已清空'); } catch { toast('清空失败，请检查浏览器设置。'); }
+        try { localStorage.removeItem(S.KEY); state = S.fresh(); storageWarning = ''; clearFeedSession(); render(); toast('进度已清空'); } catch { toast('清空失败，请检查浏览器设置。'); }
       }), true); break;
     }
   });
   document.addEventListener('change', event => {
-    if (event.target.closest('#library-filters')) { filters[event.target.name] = event.target.value; page = 1; $('#library-results').innerHTML = libraryResults(); }
+    if (event.target.closest('#library-filters')) { filters[event.target.name] = event.target.value; preferredFeedId = ''; page = 1; updateLibraryResults(); }
     if (event.target.id === 'import-file') { importFile(event.target.files[0], recovering); recovering = false; event.target.value = ''; }
     if (event.target.name === 'recurrence' && event.target.closest('#item-form')) {
       const option = $('#item-form [name="status"] option[value="done"]');
@@ -373,7 +589,7 @@
     }
   });
   document.addEventListener('input', event => {
-    if (event.target.id === 'library-query') { filters.query = event.target.value; page = 1; $('#library-results').innerHTML = libraryResults(); }
+    if (event.target.id === 'library-query') { filters.query = event.target.value; preferredFeedId = ''; page = 1; updateLibraryResults(); }
   });
   document.addEventListener('submit', event => {
     if (event.target.id === 'item-form') { event.preventDefault(); saveDetail(); }
@@ -388,6 +604,10 @@
     if (event.target.id === 'new-step' && event.key === 'Enter') { event.preventDefault(); document.querySelector('[data-action="add-step"]').click(); }
     if (event.key === '/' && !event.target.closest('input, textarea, select') && !$('#item-dialog').open && !$('#confirm-dialog').open) { event.preventDefault(); $('#global-search').focus(); }
     if (event.key === 'Escape') { $('#sidebar').classList.remove('is-open'); $('#mobile-menu').setAttribute('aria-expanded', 'false'); }
+    if (event.target.id === 'swipe-card' && !event.altKey && !event.metaKey && !event.ctrlKey) {
+      if (event.key === 'ArrowLeft') { event.preventDefault(); swipeFeed('skip'); }
+      if (event.key === 'ArrowRight') { event.preventDefault(); swipeFeed('take'); }
+    }
   });
   $('#export-top').addEventListener('click', exportData);
   $('#close-dialog').addEventListener('click', event => { event.preventDefault(); requestDetailClose(); });
@@ -399,8 +619,14 @@
   window.addEventListener('hashchange', () => { const next = location.hash.slice(1); if (Object.hasOwn(views, next)) { view = next; render(); } });
   window.addEventListener('storage', event => {
     if (event.key !== S.KEY) return;
+    if (event.newValue === null) clearFeedSession();
     try { state = S.load(localStorage, ids); storageWarning = ''; render(); toast($('#item-dialog').open ? '另一标签页的进度已同步，本页未保存的草稿已保留。' : '另一标签页的修改已同步'); }
     catch { storageWarning = '另一标签页写入的数据无法读取，请先导出原始数据。'; render(); }
+  });
+  mobileScreen.addEventListener('change', () => {
+    cancelGesture();
+    if (!modeChosen) libraryMode = mobileScreen.matches ? 'feed' : 'list';
+    render();
   });
   let lastDate = date();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && lastDate !== date()) { lastDate = date(); render(); } });

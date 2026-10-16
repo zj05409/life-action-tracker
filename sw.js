@@ -1,6 +1,6 @@
 /* Build replaces this cache key with a content hash, so releases stay coherent. */
 const CACHE = 'life-in-progress-source-v1';
-const FILES = ['./', './index.html', './styles.css', './app.js', './state.js', './assets/guide-data.js', './favicon.svg', './manifest.webmanifest', './CONTENT-LICENSE.txt'];
+const FILES = ['./', './index.html', './styles.css', './app.js', './state.js', './gestures.js', './assets/guide-data.js', './favicon.svg', './manifest.webmanifest', './CONTENT-LICENSE.txt'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });

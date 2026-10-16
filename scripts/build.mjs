@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const files = ['index.html', 'styles.css', 'app.js', 'state.js', 'assets/guide-data.js', 'favicon.svg', 'manifest.webmanifest', 'CONTENT-LICENSE.txt'];
+const files = ['index.html', 'styles.css', 'app.js', 'state.js', 'gestures.js', 'assets/guide-data.js', 'favicon.svg', 'manifest.webmanifest', 'CONTENT-LICENSE.txt'];
 await rm(path.join(root, 'dist'), { recursive: true, force: true });
 await mkdir(path.join(root, 'dist', 'assets'), { recursive: true });
 const hash = createHash('sha256');
